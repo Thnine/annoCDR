@@ -40,7 +40,7 @@ export default {
 }
 
 .test-area{
-  width:600px;
+  width:800px;
   height: 600px;
 }
 </style>
