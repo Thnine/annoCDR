@@ -2,7 +2,7 @@
   <div class="cdr-container"
     v-loading="loading"
     >
-
+    <el-checkbox v-model="zoomFlag" style="position:absolute;left:15px;bottom:40px" size="mini">zoom</el-checkbox>
     <div class="cdr-controller">
       <el-radio-group v-model="link_mode" size="mini">
         <el-radio-button label="No-link"></el-radio-button>
@@ -79,6 +79,10 @@ export default {
 
       //加载相关
       'loading':false,
+      //缩放相关
+      'zoomFlag':false,
+      'old_transform':undefined,
+
     }
   },
   methods:{
@@ -98,6 +102,9 @@ export default {
       this.chosenData.length = 0;
       this.anno_type = '';
       this.anno_visible = false;
+      this.loading = false;
+      this.zoomFlag = false;
+      this.old_transform = undefined;
     
     },
 
@@ -108,19 +115,14 @@ export default {
        * 
        * 初次重绘
        * 按照this.data绘制数据，生成group，生成raw_range
-       * 
-      //  * range_mode：
-      //  *    'fit'：使用当前data的最大范围作为range，不改变raw_range
-      //  *    'fit_set'：使用当前data的最大范围作为range，并且把生成的range作为raw_range
-      //  *    'raw'：使用当前raw_range作为range，如果raw_range为undefined，则使用fit_set模式
-       * 
-       */
+       **/
 
       const svg = d3.select('.cdr-plot')
       const self = this;
 
       //清理画布
       svg.selectAll('*').remove();
+
 
       //设置宽度，获取大小
       svg.style('width',()=>{
@@ -192,6 +194,7 @@ export default {
 
       //绘图
       const scatter = svg.append('g')
+        .classed('cdr-scatter-g',true)
         .selectAll('*')
         .data(this.data)
         .join('circle')
@@ -274,6 +277,7 @@ export default {
 
       //绘制连接线
       const mustlink = svg.append('g')
+        .classed('cdr-mustlink-g',true)
         .selectAll('*')
         .data(self.must_links)
         .join('line')
@@ -284,6 +288,7 @@ export default {
         .attr('x2',xScale((d,i)=>self.data[d[1]].x))
         .attr('y2',yScale((d,i)=>self.data[d[1]].y))
       const cannotlink = svg.append('g')
+        .classed('cdr-connotlink-g',true)
         .selectAll('*')
         .data(self.cannot_links)
         .join('line')
@@ -295,8 +300,24 @@ export default {
         .attr('y2',(d,i)=>yScale(self.data[d[1]].y))
 
 
+      //绑定zoom
+      if(this.zoomFlag){
+          function zoomed(e) {
+              d3.select('.cdr-scatter-g').attr("transform", e.transform);
+              d3.select('.cdr-mustlink-g').attr("transform", e.transform);
+              d3.select('.cdr-connotlink-g').attr("transform", e.transform);
+          }   
+          const zoom = d3.zoom()
+              .scaleExtent([0.1, 40])
+              .translateExtent([[-10000, -10000], [width + 100000, height + 10000000]])
+              // .filter(filter)
+              .on("zoom", zoomed);
+          svg.call(zoom)
+      }
+
       //绑定lasso
-      this.setLasso();
+      if(!this.zoomFlag)
+        this.setLasso();
 
       //绘制legend
       this.drawLegend()
@@ -311,24 +332,31 @@ export default {
       if(drawData === undefined || drawData === null || drawData.length != this.length){
         drawData = this.data;
       }
+
+      if(drawData === undefined || this.drawData === null || drawData.length == 0)
+        return ;
       
-      const svg = d3.select('.cdr-plot')
+      let svg = d3.select('.cdr-plot')
       const self = this;
       //清理画布
       svg.selectAll('*').remove();
+      let oldSVG = svg.node()
+      let newSVG = oldSVG.cloneNode(true);
+      oldSVG.parentNode.replaceChild(newSVG,oldSVG)
+      svg = d3.select('.cdr-plot')
+
       //设置/计算大小
       svg.style('width',()=>{
         return d3.select('.cdr-plot-container').node().getBoundingClientRect().width * 0.8
       })
       const width = svg.node().getBoundingClientRect().width;
       const height = svg.node().getBoundingClientRect().height;
-      console.log('height:',height)
 
       //获取range
       // let range = this.raw_range;
       let range = {
-          'x':[Math.min(...this.data.map(v=>v.x)),Math.max(...this.data.map(v=>v.x))],
-          'y':[Math.min(...this.data.map(v=>v.y)),Math.max(...this.data.map(v=>v.y))]
+          'x':[Math.min(...drawData.map(v=>v.x)),Math.max(...drawData.map(v=>v.x))],
+          'y':[Math.min(...drawData.map(v=>v.y)),Math.max(...drawData.map(v=>v.y))]
         }
 
       //定义scale
@@ -341,8 +369,9 @@ export default {
 
       //绘图
       const scatter = svg.append('g')
+        .classed('cdr-scatter-g',true)
         .selectAll('*')
-        .data(this.data)
+        .data(drawData)
         .join('circle')
         .classed('cdr-scatter',true)
         .classed('cdr-belink',function(d,i){
@@ -422,6 +451,7 @@ export default {
 
       //绘制连接线
       const mustlink = svg.append('g')
+        .classed('cdr-mustlink-g',true)
         .selectAll('*')
         .data(self.must_links)
         .join('line')
@@ -432,6 +462,7 @@ export default {
         .attr('x2',(d,i)=>xScale(self.data[d[1]].x))
         .attr('y2',(d,i)=>yScale(self.data[d[1]].y))
       const cannotlink = svg.append('g')
+        .classed('cdr-connotlink-g',true)
         .selectAll('*')
         .data(self.cannot_links)
         .join('line')
@@ -443,8 +474,37 @@ export default {
         .attr('y2',(d,i)=>yScale(self.data[d[1]].y))
 
 
+      //绑定zoom
+      if(this.zoomFlag){
+          function zoomed(e) {
+              d3.select('.cdr-scatter-g').attr("transform", e.transform);
+              d3.select('.cdr-mustlink-g').attr("transform", e.transform);
+              d3.select('.cdr-connotlink-g').attr("transform", e.transform);
+              self.old_transform = e.transform;
+              
+          }   
+          const zoom = d3.zoom()
+              .scaleExtent([0.1, 40])
+              .translateExtent([[-10000, -10000], [width + 100000, height + 10000000]])
+              // .filter(filter)
+              .on("zoom", zoomed);
+
+
+          console.log(self.old_transform)
+          if(self.old_transform !== undefined){
+            zoom.transform(d3.select('.cdr-scatter-g'),self.old_transform)
+            zoom.transform(d3.select('.cdr-mustlink-g'),self.old_transform)
+            zoom.transform(d3.select('.cdr-connotlink-g'),self.old_transform)
+          }
+
+          
+          svg.call(zoom)
+      }
+
       //绑定lasso
-      this.setLasso();
+      if(!this.zoomFlag){
+          this.setLasso();
+      }
 
       //绘制legend
       this.drawLegend()
@@ -570,6 +630,7 @@ export default {
         //lasso
         var lasso_start = () => {
             ls.items().classed("cdr-chosen", false).classed("cdr-possible", false);
+            // d3.selectAll('.cdr-scatter').classed("cdr-chosen", false).classed("cdr-possible", false);//由于禁用的原因，这里必须这么做
             this.chosenData.length = 0;
         };
         var lasso_draw = () => {
@@ -662,7 +723,27 @@ export default {
         this.to_link = undefined;
       }
       
-    }
+    },
+    zoomFlag(){
+      if(this.zoomFlag){
+        //清除圈选内容
+        d3.selectAll('.cdr-scatter').classed("cdr-chosen", false)
+        this.chosenData.length = 0
+        //启用zoom
+        this.update()
+      }
+      else{
+        //禁用zoom
+
+        //启动圈选
+        this.update()
+      }
+
+    },
+
+
+    
+
   }
 }
 </script>
@@ -675,6 +756,7 @@ export default {
     width: 100%;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .cdr-plot-container{
