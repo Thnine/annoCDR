@@ -81,7 +81,11 @@ export default {
       'loading':false,
       //缩放相关
       'zoomFlag':false,
+      'last_transform':undefined,
       'old_transform':undefined,
+
+      //高度相关
+      'height':0,
 
     }
   },
@@ -105,6 +109,7 @@ export default {
       this.loading = false;
       this.zoomFlag = false;
       this.old_transform = undefined;
+      this.last_transform = undefined;
     
     },
 
@@ -130,8 +135,8 @@ export default {
       })
       const width = svg.node().getBoundingClientRect().width;
       const height = svg.node().clientHeight;
+      this.height = height
 
-      console.log('height:',height)
 
       //判断特例
       if(this.data === undefined || this.data === null || this.data.length == 0)
@@ -281,7 +286,7 @@ export default {
         .selectAll('*')
         .data(self.must_links)
         .join('line')
-        .attr('stroke-width',3)
+        .attr('stroke-width',2)
         .attr('stroke','gray')
         .attr('x1',xScale((d,i)=>self.data[d[0]].x))
         .attr('y1',yScale((d,i)=>self.data[d[0]].y))
@@ -292,7 +297,7 @@ export default {
         .selectAll('*')
         .data(self.cannot_links)
         .join('line')
-        .attr('stroke-width',3)
+        .attr('stroke-width',2)
         .attr('stroke','#980000')
         .attr('x1',(d,i)=>xScale(self.data[d[0]].x))
         .attr('y1',(d,i)=>yScale(self.data[d[0]].y))
@@ -303,21 +308,54 @@ export default {
       //绑定zoom
       if(this.zoomFlag){
           function zoomed(e) {
-              d3.select('.cdr-scatter-g').attr("transform", e.transform);
-              d3.select('.cdr-mustlink-g').attr("transform", e.transform);
-              d3.select('.cdr-connotlink-g').attr("transform", e.transform);
+              let new_transform;
+              console.log('e.transform:',e.transform)
+              if(self.old_transform !== undefined){
+                new_transform = d3.zoomIdentity.translate(self.old_transform.x, self.old_transform.y).scale(self.old_transform.k).translate(e.transform.x, e.transform.y).scale(e.transform.k)                
+                // new_transform = e.transform;
+
+              }
+              else{
+                new_transform = e.transform;
+              }
+
+
+              // console.log('new:',new_transform)
+
+              d3.select('.cdr-scatter-g').attr("transform", new_transform);
+              d3.select('.cdr-mustlink-g').attr("transform", new_transform);
+              d3.select('.cdr-connotlink-g').attr("transform", new_transform);
+              self.last_transform = new_transform;
+              // console.log('last-transform',self.last_transform)
+              
           }   
           const zoom = d3.zoom()
               .scaleExtent([0.1, 40])
               .translateExtent([[-10000, -10000], [width + 100000, height + 10000000]])
               // .filter(filter)
               .on("zoom", zoomed);
+
+          if(self.last_transform !== undefined){
+            self.old_transform = self.last_transform;
+            d3.select('.cdr-scatter-g').attr("transform", self.old_transform)
+            d3.select('.cdr-mustlink-g').attr("transform", self.old_transform)
+            d3.select('.cdr-connotlink-g').attr("transform", self.old_transform)
+
+          }
           svg.call(zoom)
       }
 
       //绑定lasso
-      if(!this.zoomFlag)
-        this.setLasso();
+      if(!this.zoomFlag){
+          if(self.last_transform !== undefined){
+            self.old_transform = self.last_transform;
+            d3.select('.cdr-scatter-g').attr("transform", self.old_transform)
+            d3.select('.cdr-mustlink-g').attr("transform", self.old_transform)
+            d3.select('.cdr-connotlink-g').attr("transform", self.old_transform)
+
+          }
+          this.setLasso();
+      }
 
       //绘制legend
       this.drawLegend()
@@ -350,14 +388,14 @@ export default {
         return d3.select('.cdr-plot-container').node().getBoundingClientRect().width * 0.8
       })
       const width = svg.node().getBoundingClientRect().width;
-      const height = svg.node().getBoundingClientRect().height;
+      const height = this.height;
 
       //获取range
-      // let range = this.raw_range;
-      let range = {
-          'x':[Math.min(...drawData.map(v=>v.x)),Math.max(...drawData.map(v=>v.x))],
-          'y':[Math.min(...drawData.map(v=>v.y)),Math.max(...drawData.map(v=>v.y))]
-        }
+      let range = this.raw_range;
+      // let range = {
+      //     'x':[Math.min(...drawData.map(v=>v.x)),Math.max(...drawData.map(v=>v.x))],
+      //     'y':[Math.min(...drawData.map(v=>v.y)),Math.max(...drawData.map(v=>v.y))]
+      //   }
 
       //定义scale
       const xScale = d3.scaleLinear()
@@ -455,7 +493,7 @@ export default {
         .selectAll('*')
         .data(self.must_links)
         .join('line')
-        .attr('stroke-width',3)
+        .attr('stroke-width',2)
         .attr('stroke','#6d9eeb')
         .attr('x1',(d,i)=>xScale(self.data[d[0]].x))
         .attr('y1',(d,i)=>yScale(self.data[d[0]].y))
@@ -466,7 +504,7 @@ export default {
         .selectAll('*')
         .data(self.cannot_links)
         .join('line')
-        .attr('stroke-width',3)
+        .attr('stroke-width',2)
         .attr('stroke','#980000')
         .attr('x1',(d,i)=>xScale(self.data[d[0]].x))
         .attr('y1',(d,i)=>yScale(self.data[d[0]].y))
@@ -477,10 +515,25 @@ export default {
       //绑定zoom
       if(this.zoomFlag){
           function zoomed(e) {
-              d3.select('.cdr-scatter-g').attr("transform", e.transform);
-              d3.select('.cdr-mustlink-g').attr("transform", e.transform);
-              d3.select('.cdr-connotlink-g').attr("transform", e.transform);
-              self.old_transform = e.transform;
+              let new_transform;
+              console.log('e.transform:',e.transform)
+              if(self.old_transform !== undefined){
+                new_transform = d3.zoomIdentity.translate(self.old_transform.x, self.old_transform.y).scale(self.old_transform.k).translate(e.transform.x, e.transform.y).scale(e.transform.k)                
+                // new_transform = e.transform;
+
+              }
+              else{
+                new_transform = e.transform;
+              }
+
+
+              // console.log('new:',new_transform)
+
+              d3.select('.cdr-scatter-g').attr("transform", new_transform);
+              d3.select('.cdr-mustlink-g').attr("transform", new_transform);
+              d3.select('.cdr-connotlink-g').attr("transform", new_transform);
+              self.last_transform = new_transform;
+              // console.log('last-transform',self.last_transform)
               
           }   
           const zoom = d3.zoom()
@@ -489,20 +542,28 @@ export default {
               // .filter(filter)
               .on("zoom", zoomed);
 
+          if(self.last_transform !== undefined){
+            self.old_transform = self.last_transform;
+            // zoom.transform(d3.select('.cdr-scatter-g'),self.old_transform)
+            // zoom.transform(d3.select('.cdr-mustlink-g'),self.old_transform)
+            // zoom.transform(d3.select('.cdr-connotlink-g'),self.old_transform)
+            d3.select('.cdr-scatter-g').attr("transform", self.old_transform)
+            d3.select('.cdr-mustlink-g').attr("transform", self.old_transform)
+            d3.select('.cdr-connotlink-g').attr("transform", self.old_transform)
 
-          console.log(self.old_transform)
-          if(self.old_transform !== undefined){
-            zoom.transform(d3.select('.cdr-scatter-g'),self.old_transform)
-            zoom.transform(d3.select('.cdr-mustlink-g'),self.old_transform)
-            zoom.transform(d3.select('.cdr-connotlink-g'),self.old_transform)
           }
-
-          
           svg.call(zoom)
       }
 
       //绑定lasso
       if(!this.zoomFlag){
+          if(self.last_transform !== undefined){
+            self.old_transform = self.last_transform;
+            d3.select('.cdr-scatter-g').attr("transform", self.old_transform)
+            d3.select('.cdr-mustlink-g').attr("transform", self.old_transform)
+            d3.select('.cdr-connotlink-g').attr("transform", self.old_transform)
+
+          }
           this.setLasso();
       }
 
@@ -680,7 +741,8 @@ export default {
         return;
       }
       else{//新的类型
-          //在groups中填入新的类型，并且分配颜色
+          //在groups中填入新的类型，并且分配一个差异较大的新颜色
+
           this.groups[this.anno_type]={
             'color':d3.interpolateRainbow(Math.random())//TODO撞色的可能
           }
